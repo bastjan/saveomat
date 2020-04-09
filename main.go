@@ -64,6 +64,7 @@ func postTar(c echo.Context) error {
 	}
 	defer tar.Close()
 
+	c.Response().Header().Set(echo.HeaderContentDisposition, `attachment; filename="images.tar"`)
 	return c.Stream(http.StatusOK, mime.TypeByExtension(".tar"), tar)
 }
 
