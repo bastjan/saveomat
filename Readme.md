@@ -1,6 +1,6 @@
 # Save-O-Mat
 
-`docker save` with ease. Over the network.
+`docker save` with ease. With a simple HTTP API.
 
 ```sh
 cat <<EOF > images.txt
