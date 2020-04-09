@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"mime"
 	"net/http"
 	"os"
@@ -29,19 +28,6 @@ func main() {
 	e.POST("/tar", postTar)
 
 	e.Logger.Fatal(e.Start(":8080"))
-
-	imgTar, err := getImages(context.TODO(), images)
-	if err != nil {
-		panic(err)
-	}
-	defer imgTar.Close()
-
-	f, err := ioutil.TempFile(".", "images-*.tar")
-	if err != nil {
-		panic(err)
-	}
-	defer f.Close()
-	io.Copy(f, imgTar)
 }
 
 func postTar(c echo.Context) error {
