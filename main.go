@@ -3,7 +3,6 @@ package main
 import (
 	"bufio"
 	"context"
-	"fmt"
 	"io"
 	"mime"
 	"net/http"
@@ -23,6 +22,7 @@ func main() {
 
 	e.Use(middleware.Logger())
 	e.Use(middleware.Recover())
+	e.Use(middleware.BodyLimit("512K"))
 
 	e.Static("/", "public")
 	e.POST("/tar", postTar)
@@ -34,9 +34,6 @@ func postTar(c echo.Context) error {
 	file, err := c.FormFile("images.txt")
 	if err != nil {
 		return err
-	}
-	if file.Size > 512*1024 {
-		return fmt.Errorf("input too large: %d bytes, allowed are %d bytes", file.Size, 512*1024)
 	}
 	src, err := file.Open()
 	if err != nil {
