@@ -26,8 +26,19 @@ func main() {
 
 	e.Static("/", "public")
 	e.POST("/tar", postTar)
+	e.GET("/tar", getTar)
 
 	e.Logger.Fatal(e.Start(":8080"))
+}
+
+func getTar(c echo.Context) error {
+	p := c.QueryParams()
+	images, ok := p["image"]
+	if !ok {
+		return c.NoContent(http.StatusBadRequest)
+	}
+
+	return streamImages(c, normalizeImages(images))
 }
 
 func postTar(c echo.Context) error {
@@ -42,20 +53,35 @@ func postTar(c echo.Context) error {
 	defer src.Close()
 
 	images := make([]string, 0, 5)
-
 	s := bufio.NewScanner(src)
 	for s.Scan() {
-		image := strings.Trim(s.Text(), " ")
-		if image == "" || strings.HasPrefix(image, "#") {
-			continue
-		}
 		images = append(images, s.Text())
 	}
 	if s.Err() != nil {
 		return s.Err()
 	}
 
-	tar, err := getImages(c.Request().Context(), images)
+	return streamImages(c, normalizeImages(images))
+}
+
+func normalizeImages(images []string) []string {
+	normalized := make([]string, 0, len(images))
+	for _, img := range images {
+		img = strings.Trim(img, " ")
+		if img == "" || strings.HasPrefix(img, "#") {
+			continue
+		}
+		normalized = append(normalized, img)
+	}
+	return normalized
+}
+
+func streamImages(c echo.Context, images []string) error {
+	if len(images) == 0 {
+		return c.NoContent(http.StatusBadRequest)
+	}
+
+	tar, err := pullAndSaveImages(c.Request().Context(), images)
 	if err != nil {
 		return err
 	}
@@ -65,7 +91,7 @@ func postTar(c echo.Context) error {
 	return c.Stream(http.StatusOK, mime.TypeByExtension(".tar"), tar)
 }
 
-func getImages(ctx context.Context, images []string) (io.ReadCloser, error) {
+func pullAndSaveImages(ctx context.Context, images []string) (io.ReadCloser, error) {
 	cli, err := client.NewClientWithOpts(client.FromEnv)
 	if err != nil {
 		panic(err)
