@@ -28,7 +28,9 @@ func NewServer(c client.ImageAPIClient) *Server {
 	e.Use(middleware.Recover())
 	e.Use(middleware.BodyLimit("512K"))
 
-	e.Static("/", "public")
+	e.GET("/", func(c echo.Context) error {
+		return c.HTML(http.StatusOK, indexHTML)
+	})
 	e.POST("/tar", s.postTar)
 	e.GET("/tar", s.getTar)
 

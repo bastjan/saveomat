@@ -1,4 +1,6 @@
-<!doctype html>
+package server
+
+const indexHTML = `<!doctype html>
 <html lang="en">
 <head>
     <meta charset="utf-8">
@@ -13,3 +15,4 @@
 </form>
 </body>
 </html>
+`
