@@ -15,24 +15,31 @@ import (
 	"github.com/labstack/echo/v4/middleware"
 )
 
+type ServerOpts struct {
+	BaseURL      string
+	DockerClient client.ImageAPIClient
+}
+
 type Server struct {
 	*echo.Echo
 	DockerClient client.ImageAPIClient
 }
 
-func NewServer(c client.ImageAPIClient) *Server {
+func NewServer(opt ServerOpts) *Server {
 	e := echo.New()
-	s := &Server{e, c}
+	s := &Server{e, opt.DockerClient}
 
 	e.Use(middleware.Logger())
 	e.Use(middleware.Recover())
 	e.Use(middleware.BodyLimit("512K"))
 
-	e.GET("/", func(c echo.Context) error {
+	baseurl := strings.TrimSuffix(opt.BaseURL, "/")
+	g := e.Group(baseurl)
+	g.GET("/", func(c echo.Context) error {
 		return c.HTML(http.StatusOK, indexHTML)
 	})
-	e.POST("/tar", s.postTar)
-	e.GET("/tar", s.getTar)
+	g.POST("/tar", s.postTar)
+	g.GET("/tar", s.getTar)
 
 	return s
 }

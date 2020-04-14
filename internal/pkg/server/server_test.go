@@ -20,10 +20,34 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func TestBaseURL(t *testing.T) {
+	var subject http.Handler
+
+	subject = NewServer(ServerOpts{BaseURL: ""})
+	expectResponseCode(t, subject, "/", http.StatusOK)
+	expectResponseCode(t, subject, "/sub/", http.StatusNotFound)
+
+	subject = NewServer(ServerOpts{BaseURL: "/sub"})
+	expectResponseCode(t, subject, "/", http.StatusNotFound)
+	expectResponseCode(t, subject, "/sub/", http.StatusOK)
+}
+
+func expectResponseCode(t *testing.T, handler http.Handler, path string, code int) {
+	t.Helper()
+
+	req := httptest.NewRequest(http.MethodGet, path, nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	assert.Equal(t, code, rec.Code)
+}
+
 func TestPostTar(t *testing.T) {
 	images := []string{"busybox", "alpine"}
 
-	subject := NewServer(dockerMockFor(t, images))
+	subject := NewServer(ServerOpts{
+		DockerClient: dockerMockFor(t, images),
+	})
 
 	upload := new(bytes.Buffer)
 	mpw := multipart.NewWriter(upload)
@@ -35,9 +59,8 @@ func TestPostTar(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/tar", upload)
 	req.Header.Set(echo.HeaderContentType, mpw.FormDataContentType())
 	rec := httptest.NewRecorder()
-	c := subject.NewContext(req, rec)
 
-	assert.NoError(t, subject.postTar(c))
+	subject.ServeHTTP(rec, req)
 	assert.Equal(t, http.StatusOK, rec.Code)
 
 	responseTar, err := ioutil.ReadAll(rec.Body)
@@ -49,14 +72,15 @@ func TestPostTar(t *testing.T) {
 func TestGetTar(t *testing.T) {
 	images := []string{"busybox", "alpine"}
 
-	subject := NewServer(dockerMockFor(t, images))
+	subject := NewServer(ServerOpts{
+		DockerClient: dockerMockFor(t, images),
+	})
 
 	params := url.Values{"image": images}.Encode()
 	req := httptest.NewRequest(http.MethodGet, "/tar?"+params, nil)
 	rec := httptest.NewRecorder()
-	c := subject.NewContext(req, rec)
 
-	assert.NoError(t, subject.getTar(c))
+	subject.ServeHTTP(rec, req)
 	assert.Equal(t, http.StatusOK, rec.Code)
 
 	responseTar, err := ioutil.ReadAll(rec.Body)
