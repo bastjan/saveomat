@@ -9,7 +9,7 @@ const indexHTML = `<!doctype html>
 <body>
 <h2>Upload images.txt file</h2>
 
-<form action="./tar" method="post" enctype="multipart/form-data">
+<form action="tar" method="post" enctype="multipart/form-data">
     Images file: <input type="file" name="images.txt"><br><br>
     <input type="submit" value="Submit">
 </form>
