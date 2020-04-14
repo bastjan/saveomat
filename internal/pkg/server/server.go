@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"context"
 	"io"
-	"mime"
 	"net/http"
 	"os"
 	"strings"
@@ -101,7 +100,7 @@ func (s *Server) streamImages(c echo.Context, images []string) error {
 	defer tar.Close()
 
 	c.Response().Header().Set(echo.HeaderContentDisposition, `attachment; filename="images.tar"`)
-	return c.Stream(http.StatusOK, mime.TypeByExtension(".tar"), tar)
+	return c.Stream(http.StatusOK, "application/x-tar", tar)
 }
 
 func (s *Server) pullAndSaveImages(ctx context.Context, images []string) (io.ReadCloser, error) {
