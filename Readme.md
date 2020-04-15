@@ -1,5 +1,7 @@
 # Save-O-Mat
 
+[![](https://github.com/bastjan/go-legacysyslog/workflows/Go/badge.svg)](https://github.com/bastjan/saveomat/actions?query=workflow%3AGo) [![Docker Pulls](https://img.shields.io/docker/pulls/bastjan/saveomat)](https://hub.docker.com/r/bastjan/saveomat)
+
 `docker save` with ease. With a simple HTTP API.
 
 ```sh
