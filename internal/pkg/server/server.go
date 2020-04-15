@@ -107,7 +107,7 @@ func (s *Server) pullAndSaveImages(ctx context.Context, images []string) (io.Rea
 	for _, img := range images {
 		rc, err := s.DockerClient.ImagePull(ctx, img, types.ImagePullOptions{})
 		if err != nil {
-			panic(err)
+			return nil, err
 		}
 		defer rc.Close()
 		io.Copy(os.Stdout, rc)
