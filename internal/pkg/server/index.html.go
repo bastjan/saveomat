@@ -8,8 +8,7 @@ const indexHTML = `<!doctype html>
     <style>
         body {
             font-family: sans-serif;
-            max-width: fit-content;
-            max-width: -moz-fit-content;
+            max-width: 960px;
             margin: auto;
         }
         code, pre.codeblock {
@@ -17,12 +16,16 @@ const indexHTML = `<!doctype html>
             padding: 3px;
             border-radius: 3px;
             font-family: monospace;
+            overflow-y: auto;
         }
         form {
             margin-top: 12px;
         }
-        .ext-url {
+        .ext-url, .dark-red {
             color: #BF360C;
+        }
+        .dark-blue {
+            color: #1a237e;
         }
     </style>
 </head>
@@ -46,10 +49,11 @@ The MIT License
     required images and save them to a tar archive.
 </p>
 
-<h3>Download Archive</h3>
+<h3>Download archive</h3>
 
 <form action="tar" method="post" enctype="multipart/form-data">
-    <label>Images File: <input type="file" name="images.txt"></label><br><br>
+    <label>Images file: <input type="file" name="images.txt"></label><br><br>
+    <label>Optional auth (<code>~/.docker/config.json</code>): <input type="file" name="config.json"></label><br><br>
     <input type="submit" value="Download archive">
 </form>
 
@@ -70,6 +74,25 @@ debian:buster
 curl -fF "images.txt=@images.txt" <span class="ext-url">EXTERNAL_URL/</span> > images.tar
 # OR
 wget '<span class="ext-url">EXTERNAL_URL/</span>?image=hello-world&image=busybox' -O images.tar
+</pre>
+
+<h3>Authentication</h3>
+
+<p>
+    To pull private repositories or images an optional <code>config.json</code> can be provided.
+    The file should be in the docker client config format and can usually be found under <code>$HOME/.docker/config.json</code>.
+</p>
+
+<p>
+    ⚠️ While private images are not accessible without authentication, they are cached on the server.
+</p>
+
+<p>
+    Authentication only works for POST requests.
+</p>
+
+<pre class="codeblock">
+curl -fF "images.txt=@images.txt" <span class="dark-blue">-F "config.json=@$HOME/.docker/config.json"</span> <span class="ext-url">EXTERNAL_URL/</span> > images.tar
 </pre>
 
 <script>

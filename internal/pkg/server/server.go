@@ -8,6 +8,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/bastjan/saveomat/internal/pkg/auth"
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/client"
 	"github.com/labstack/echo/v4"
@@ -50,7 +51,7 @@ func (s *Server) getTar(c echo.Context) error {
 		return c.NoContent(http.StatusBadRequest)
 	}
 
-	return s.streamImages(c, normalizeImages(images))
+	return s.streamImages(c, auth.EmptyAuthenticator, normalizeImages(images))
 }
 
 func (s *Server) postTar(c echo.Context) error {
@@ -64,6 +65,11 @@ func (s *Server) postTar(c echo.Context) error {
 	}
 	defer src.Close()
 
+	authn, err := authFromFormFile(c, "config.json")
+	if err != nil {
+		return err
+	}
+
 	images := make([]string, 0, 5)
 	sc := bufio.NewScanner(src)
 	for sc.Scan() {
@@ -73,7 +79,7 @@ func (s *Server) postTar(c echo.Context) error {
 		return sc.Err()
 	}
 
-	return s.streamImages(c, normalizeImages(images))
+	return s.streamImages(c, authn, normalizeImages(images))
 }
 
 func normalizeImages(images []string) []string {
@@ -88,12 +94,12 @@ func normalizeImages(images []string) []string {
 	return normalized
 }
 
-func (s *Server) streamImages(c echo.Context, images []string) error {
+func (s *Server) streamImages(c echo.Context, pullAuth auth.Authenticator, images []string) error {
 	if len(images) == 0 {
 		return c.NoContent(http.StatusBadRequest)
 	}
 
-	tar, err := s.pullAndSaveImages(c.Request().Context(), images)
+	tar, err := s.pullAndSaveImages(c.Request().Context(), pullAuth, images)
 	if err != nil {
 		return err
 	}
@@ -103,9 +109,15 @@ func (s *Server) streamImages(c echo.Context, images []string) error {
 	return c.Stream(http.StatusOK, "application/x-tar", tar)
 }
 
-func (s *Server) pullAndSaveImages(ctx context.Context, images []string) (io.ReadCloser, error) {
+func (s *Server) pullAndSaveImages(ctx context.Context, authn auth.Authenticator, images []string) (io.ReadCloser, error) {
 	for _, img := range images {
-		rc, err := s.DockerClient.ImagePull(ctx, img, types.ImagePullOptions{})
+		encodedAuth, err := auth.RegistryAuthFor(authn, img)
+		if err != nil {
+			return nil, err
+		}
+		rc, err := s.DockerClient.ImagePull(ctx, img, types.ImagePullOptions{
+			RegistryAuth: encodedAuth,
+		})
 		if err != nil {
 			return nil, err
 		}
@@ -114,4 +126,19 @@ func (s *Server) pullAndSaveImages(ctx context.Context, images []string) (io.Rea
 	}
 
 	return s.DockerClient.ImageSave(ctx, images)
+}
+
+func authFromFormFile(c echo.Context, filename string) (auth.Authenticator, error) {
+	authFile, err := c.FormFile(filename)
+	if err != nil {
+		c.Logger().Info("no authentication info provided")
+		return auth.EmptyAuthenticator, nil
+	}
+	authSrc, err := authFile.Open()
+	if err != nil {
+		return nil, err
+	}
+	defer authSrc.Close()
+
+	return auth.FromReader(authSrc)
 }

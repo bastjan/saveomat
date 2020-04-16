@@ -23,3 +23,16 @@ wget 'localhost:8080/tar?image=hello-world&image=busybox' -O images.tar
 The `BASE_URL` environment variable allows hosting under a subpath.
 
 If the value of `BASE_URL` is `/saveomat` the image request becomes `localhost:8080/saveomat/tar`.
+
+### Authentication
+
+To pull private repositories or images an optional `config.json` can be provided.
+The file should be in the docker client config format and can usually be found under `$HOME/.docker/config.json`.
+
+⚠️ While private images are not accessible without authentication, they are cached on the server.
+
+Authentication only works for POST requests.
+
+```sh
+curl -fF "images.txt=@images.txt" -F "config.json=@$HOME/.docker/config.json" http://localhost:8080/tar > images.tar
+```
