@@ -1,0 +1,27 @@
+#!/bin/sh
+
+set -e
+
+# This script will be run by bazel when building process starts to
+# generate key-value information that represents the status of the
+# workspace. The output should be like
+#
+# KEY1 VALUE1
+# KEY2 VALUE2
+#
+# If the script exits with non-zero code, it's considered as a failure
+# and the output will be discarded.
+
+if [ "$GITHUB_REF" = "refs/heads/master" ]; then
+    echo "DOCKER_TAG latest"
+    exit 0
+fi
+
+if [ -z "$PR_LABEL" -o -z "$PR_NUMBER" ]; then
+    echo "\$PR_LABEL or \$PR_NUMBER unset"
+    exit 1
+fi
+
+label=$(printf "$PR_LABEL" | sed 's/[^-.A-z0-9]/-/g')
+
+echo "DOCKER_TAG pr-${PR_NUMBER}-${label}"

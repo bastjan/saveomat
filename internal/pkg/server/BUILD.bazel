@@ -1,0 +1,37 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "go_default_library",
+    srcs = [
+        "index.html.go",
+        "server.go",
+    ],
+    importpath = "github.com/bastjan/saveomat/internal/pkg/server",
+    visibility = ["//:__subpackages__"],
+    deps = [
+        "//internal/pkg/auth:go_default_library",
+        "@com_github_docker_docker//api/types:go_default_library",
+        "@com_github_docker_docker//client:go_default_library",
+        "@com_github_labstack_echo_v4//:go_default_library",
+        "@com_github_labstack_echo_v4//middleware:go_default_library",
+    ],
+)
+
+go_test(
+    name = "go_default_test",
+    srcs = [
+        "image_api_client_mock_test.go",
+        "server_test.go",
+    ],
+    embed = [":go_default_library"],
+    deps = [
+        "//internal/pkg/auth:go_default_library",
+        "@com_github_docker_docker//api/types:go_default_library",
+        "@com_github_docker_docker//api/types/filters:go_default_library",
+        "@com_github_docker_docker//api/types/image:go_default_library",
+        "@com_github_docker_docker//api/types/registry:go_default_library",
+        "@com_github_golang_mock//gomock:go_default_library",
+        "@com_github_labstack_echo_v4//:go_default_library",
+        "@com_github_stretchr_testify//assert:go_default_library",
+    ],
+)
