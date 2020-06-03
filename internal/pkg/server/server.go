@@ -13,6 +13,14 @@ import (
 	"github.com/docker/docker/client"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
+	"helm.sh/helm/v3/pkg/cli"
+	"helm.sh/helm/v3/pkg/downloader"
+	"helm.sh/helm/v3/pkg/getter"
+)
+
+const (
+	repoConfig = "/tmp/helm/repositories.yaml"
+	repoCache  = "/tmp/helm/foo"
 )
 
 type ServerOpts struct {
@@ -40,6 +48,7 @@ func NewServer(opt ServerOpts) *Server {
 	})
 	g.POST("/tar", s.postTar)
 	g.GET("/tar", s.getTar)
+	g.POST("/helm", s.postHelm)
 
 	return s
 }
@@ -80,6 +89,26 @@ func (s *Server) postTar(c echo.Context) error {
 	}
 
 	return s.streamImages(c, authn, normalizeImages(images))
+}
+
+func (s *Server) postHelm(c echo.Context) error {
+	_, err := c.FormFile("values.yaml")
+	if err != nil {
+		return err
+	}
+
+	_ = downloader.ChartDownloader{
+		Out:              os.Stderr,
+		RepositoryConfig: repoConfig,
+		RepositoryCache:  repoCache,
+		Getters: getter.All(&cli.EnvSettings{
+			RepositoryConfig: repoConfig,
+			RepositoryCache:  repoCache,
+		}),
+	}
+
+	var images []string
+	return s.streamImages(c, auth.EmptyAuthenticator, normalizeImages(images))
 }
 
 func normalizeImages(images []string) []string {

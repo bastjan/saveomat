@@ -4,14 +4,17 @@ go 1.14
 
 require (
 	github.com/Azure/go-ansiterm v0.0.0-20170929234023-d6e3b3328b78 // indirect
+	github.com/Masterminds/semver v1.5.0 // indirect
 	github.com/Microsoft/hcsshim v0.8.7 // indirect
 	github.com/containerd/containerd v1.3.4 // indirect
 	github.com/containerd/continuity v0.0.0-20200413184840-d3ef23f19fbb // indirect
 	github.com/docker/cli v0.0.0-20200415144226-ae66898200af
-	github.com/docker/distribution v0.0.0-20200319173657-742aab907b54
+	github.com/docker/distribution v2.7.1+incompatible
 	github.com/docker/docker v17.12.0-ce-rc1.0.20200309214505-aa6a9891b09c+incompatible
 	github.com/docker/docker-credential-helpers v0.6.3 // indirect
 	github.com/docker/go-connections v0.4.0 // indirect
+	github.com/docker/go-events v0.0.0-20190806004212-e31b211e4f1c // indirect
+	github.com/docker/go-metrics v0.0.1 // indirect
 	github.com/gogo/protobuf v1.3.1 // indirect
 	github.com/golang/mock v1.4.3
 	github.com/golang/protobuf v1.4.0 // indirect
@@ -34,4 +37,6 @@ require (
 	gopkg.in/check.v1 v1.0.0-20200227125254-8fa46927fb4f // indirect
 	gopkg.in/yaml.v2 v2.2.8 // indirect
 	gotest.tools/v3 v3.0.2 // indirect
+	helm.sh/helm/v3 v3.2.1
+	k8s.io/helm v2.16.7+incompatible
 )
