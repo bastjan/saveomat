@@ -13,14 +13,17 @@ import (
 	"github.com/docker/docker/client"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
+	"github.com/pkg/errors"
 	"helm.sh/helm/v3/pkg/cli"
 	"helm.sh/helm/v3/pkg/downloader"
 	"helm.sh/helm/v3/pkg/getter"
+	"helm.sh/helm/v3/pkg/repo"
 )
 
-const (
-	repoConfig = "/tmp/helm/repositories.yaml"
-	repoCache  = "/tmp/helm/foo"
+var (
+	repoConfig  = os.Getenv("HELM_REPO_CONFIG_FILE")
+	repoCache   = os.Getenv("HELM_REPO_DIR")
+	downloadDir = os.Getenv("HELM_DOWNLOAD_DIR")
 )
 
 type ServerOpts struct {
@@ -97,7 +100,24 @@ func (s *Server) postHelm(c echo.Context) error {
 		return err
 	}
 
-	_ = downloader.ChartDownloader{
+	repoName := c.FormValue("repoName")
+	repoURL := c.FormValue("repoURL")
+	repoCfg := repo.Entry{
+		Name: repoName,
+		URL:  repoURL,
+	}
+	repo, err := repo.NewChartRepository(&repoCfg, getter.All(&cli.EnvSettings{
+		RepositoryConfig: repoConfig,
+		RepositoryCache:  repoCache,
+	}))
+	if err != nil {
+		return err
+	}
+	if _, err := repo.DownloadIndexFile(); err != nil {
+		return errors.Wrapf(err, "looks like %q is not a valid chart repository or cannot be reached", repoURL)
+	}
+
+	dl := downloader.ChartDownloader{
 		Out:              os.Stderr,
 		RepositoryConfig: repoConfig,
 		RepositoryCache:  repoCache,
@@ -106,6 +126,14 @@ func (s *Server) postHelm(c echo.Context) error {
 			RepositoryCache:  repoCache,
 		}),
 	}
+	chrtRef := c.FormValue("chart")
+	chrtVer := c.FormValue("version")
+	destFile, _, err := dl.DownloadTo(chrtRef, chrtVer, "/tmp/dl")
+	if err != nil {
+		return err
+	}
+
+	c.Logger().Info(destFile)
 
 	var images []string
 	return s.streamImages(c, auth.EmptyAuthenticator, normalizeImages(images))
