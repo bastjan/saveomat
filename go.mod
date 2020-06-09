@@ -27,4 +27,5 @@ require (
 	gopkg.in/yaml.v3 v3.0.0-20200605160147-a5ece683394c
 	gotest.tools/v3 v3.0.2 // indirect
 	helm.sh/helm/v3 v3.2.1
+	rsc.io/letsencrypt v0.0.3 // indirect
 )

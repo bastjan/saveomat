@@ -21,7 +21,8 @@ import (
 	"github.com/mikefarah/yq/v3/pkg/yqlib"
 	"github.com/pkg/errors"
 	"gopkg.in/yaml.v3"
-	"helm.sh/helm/v3/pkg/chart"
+	"helm.sh/helm/v3/pkg/action"
+	"helm.sh/helm/v3/pkg/chart/loader"
 	"helm.sh/helm/v3/pkg/cli"
 	"helm.sh/helm/v3/pkg/downloader"
 	"helm.sh/helm/v3/pkg/getter"
@@ -32,10 +33,11 @@ var (
 	repoFile    = os.Getenv("HELM_REPO_CONFIG_FILE")
 	repoCache   = os.Getenv("HELM_REPO_CACHE_DIR")
 	downloadDir = os.Getenv("HELM_DOWNLOAD_DIR")
-	getters     = getter.All(&cli.EnvSettings{
+	settings    = &cli.EnvSettings{
 		RepositoryConfig: repoFile,
 		RepositoryCache:  repoCache,
-	})
+	}
+	getters = getter.All(settings)
 )
 
 type ServerOpts struct {
@@ -51,6 +53,9 @@ type Server struct {
 func NewServer(opt ServerOpts) *Server {
 	//err := os.MkdirAll(filepath.Dir(repoFile), os.ModePerm)
 	//if err != nil && !os.IsExist(err) {
+	//	return err
+	//}
+	//if err := os.MkdirAll(repoCache, 0755); err != nil {
 	//	return err
 	//}
 
@@ -122,7 +127,7 @@ func (s *Server) postHelmRepo(c echo.Context) error {
 		return fmt.Errorf("Please specify a repository URL using the url form param")
 	}
 
-	// The following code is mostly plugged from https://github.com/helm/helm/blob/master/cmd/helm/repo_add.go#L85
+	// The following code is adapted from https://github.com/helm/helm/blob/master/cmd/helm/repo_add.go#L85
 	fileLock := flock.New(strings.Replace(repoFile, filepath.Ext(repoFile), ".lock", 1))
 	lockCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -173,49 +178,97 @@ func (s *Server) postHelmRepo(c echo.Context) error {
 }
 
 func (s *Server) postHelmChart(c echo.Context) error {
-	_, err := c.FormFile("values.yaml")
-	if err != nil {
-		return err
-	}
-
-	dl := downloader.ChartDownloader{
-		Out:              os.Stderr,
-		RepositoryConfig: repoFile,
-		RepositoryCache:  repoCache,
-		Getters:          getters,
-	}
 	chrtRef := c.FormValue("chart")
 	chrtVer := c.FormValue("version")
-	destFile, _, err := dl.DownloadTo(chrtRef, chrtVer, downloadDir)
+
+	file, err := c.FormFile("values.yaml")
+	if err != nil {
+		return err
+	}
+	src, err := file.Open()
+	if err != nil {
+		return err
+	}
+	defer src.Close()
+	buf, err := ioutil.ReadAll(src)
+	if err != nil {
+		return err
+	}
+	valsYAML := map[string]interface{}{}
+	if err := yaml.Unmarshal(buf, &valsYAML); err != nil {
+		return err
+	}
+	vals := make(map[string]interface{})
+	vals["Values"] = valsYAML
+	vals["Chart"] = map[string]string{"Name": chrtRef}
+	vals["Release"] = map[string]string{"Name": "saveomat"}
+
+	// The following code is adapted from https://github.com/helm/helm/blob/master/cmd/helm/install.go#L159
+	client := action.NewInstall(&action.Configuration{})
+	client.ClientOnly = true
+	client.DryRun = true
+	client.Version = chrtVer
+	name, chart, err := client.NameAndChart([]string{"saveomat", chrtRef})
+	if err != nil {
+		return err
+	}
+	client.ReleaseName = name
+
+	cp, err := client.ChartPathOptions.LocateChart(chart, settings)
 	if err != nil {
 		return err
 	}
 
-	c.Logger().Info(destFile)
-	return nil
+	// Check chart dependencies to make sure all are present in /charts
+	chartRequested, err := loader.Load(cp)
+	if err != nil {
+		return err
+	}
+	if req := chartRequested.Metadata.Dependencies; req != nil {
+		// If CheckDependencies returns an error, we have unfulfilled dependencies.
+		// As of Helm 2.4.0, this is treated as a stopping condition:
+		// https://github.com/helm/helm/issues/2209
+		if err := action.CheckDependencies(chartRequested, req); err != nil {
+			if client.DependencyUpdate {
+				man := &downloader.Manager{
+					Out:              os.Stdout,
+					ChartPath:        cp,
+					Keyring:          client.ChartPathOptions.Keyring,
+					SkipUpdate:       false,
+					Getters:          getters,
+					RepositoryConfig: settings.RepositoryConfig,
+					RepositoryCache:  settings.RepositoryCache,
+					Debug:            settings.Debug,
+				}
+				if err := man.Update(); err != nil {
+					return err
+				}
+				// Reload the chart with the updated Chart.lock file.
+				if chartRequested, err = loader.Load(cp); err != nil {
+					return errors.Wrap(err, "failed reloading chart after repo update")
+				}
+			} else {
+				return err
+			}
+		}
+	}
+	release, err := client.Run(chartRequested, vals)
+	if err != nil {
+		return err
+	}
 
-	//var images []string
-	//return s.streamImages(c, auth.EmptyAuthenticator, normalizeImages(images))
-}
+	// TODO do not use strings split it here it can and will break
+	docs := strings.Split(release.Manifest, "---")
+	var images []string
+	for _, doc := range docs {
+		imgs, err := findImageNodeInYaml(doc)
+		if err != nil {
+			return err
+		}
+		images = append(images, imgs...)
+	}
 
-func findImagesInHelmChart(chrt *chart.Chart, values map[string]interface{}) ([]string, error) {
-	return nil, nil
-	//rendered, err := engine.New().Render(chrt, values)
-	//if err != nil {
-	//	return nil, err
-	//}
-	//var images = make([]string, len(rendered))
-	//for filename, contents := range rendered {
-	//	if !strings.HasSuffix(filename, "yaml") && !strings.HasSuffix(filename, "yml") {
-	//		continue
-	//	}
-	//	nodes, err := findImageNodeInYaml(contents)
-	//	if err != nil {
-	//		return nil, err
-	//	}
-	//	images = append(images, nodes...)
-	//}
-	//return images, nil
+	return s.streamImages(c, auth.EmptyAuthenticator, normalizeImages(images))
 }
 
 func findImageNodeInYaml(yml string) ([]string, error) {
