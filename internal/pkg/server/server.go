@@ -18,6 +18,7 @@ import (
 	"github.com/gofrs/flock"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
+	"github.com/labstack/gommon/log"
 	"github.com/mikefarah/yq/v3/pkg/yqlib"
 	"github.com/pkg/errors"
 	"gopkg.in/yaml.v3"
@@ -51,16 +52,22 @@ type Server struct {
 }
 
 func NewServer(opt ServerOpts) *Server {
-	//err := os.MkdirAll(filepath.Dir(repoFile), os.ModePerm)
-	//if err != nil && !os.IsExist(err) {
-	//	return err
-	//}
-	//if err := os.MkdirAll(repoCache, 0755); err != nil {
-	//	return err
-	//}
+	err := os.MkdirAll(filepath.Dir(repoFile), os.ModePerm)
+	if err != nil && !os.IsExist(err) {
+		panic(err)
+	}
+	err = os.MkdirAll(repoCache, 0755)
+	if err != nil && !os.IsExist(err) {
+		panic(err)
+	}
+	err = os.MkdirAll(downloadDir, 0755)
+	if err != nil && !os.IsExist(err) {
+		panic(err)
+	}
 
 	e := echo.New()
 	s := &Server{e, opt.DockerClient}
+	s.Logger.SetLevel(env2Lvl("LOG_LEVEL"))
 
 	e.Use(middleware.Logger())
 	e.Use(middleware.Recover())
@@ -194,14 +201,10 @@ func (s *Server) postHelmChart(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	valsYAML := map[string]interface{}{}
-	if err := yaml.Unmarshal(buf, &valsYAML); err != nil {
+	vals := map[string]interface{}{}
+	if err := yaml.Unmarshal(buf, &vals); err != nil {
 		return err
 	}
-	vals := make(map[string]interface{})
-	vals["Values"] = valsYAML
-	vals["Chart"] = map[string]string{"Name": chrtRef}
-	vals["Release"] = map[string]string{"Name": "saveomat"}
 
 	// The following code is adapted from https://github.com/helm/helm/blob/master/cmd/helm/install.go#L159
 	client := action.NewInstall(&action.Configuration{})
@@ -268,17 +271,21 @@ func (s *Server) postHelmChart(c echo.Context) error {
 		images = append(images, imgs...)
 	}
 
+	c.Logger().Info(fmt.Sprintf("Found %d images: %s", len(images), images))
 	return s.streamImages(c, auth.EmptyAuthenticator, normalizeImages(images))
 }
 
 func findImageNodeInYaml(yml string) ([]string, error) {
 	var node yaml.Node
+	var result []string
 	err := yaml.Unmarshal([]byte(yml), &node)
+	if err != nil {
+		return result, err
+	}
 	nodes, err := yqlib.NewYqLib().Get(&node, "**.image", false)
 	if err != nil {
 		return nil, err
 	}
-	var result []string
 	for _, match := range nodes {
 		result = append(result, fmt.Sprintf("%s", match.Node.Value))
 	}
@@ -344,4 +351,19 @@ func authFromFormFile(c echo.Context, filename string) (auth.Authenticator, erro
 	defer authSrc.Close()
 
 	return auth.FromReader(authSrc)
+}
+
+func env2Lvl(v string) log.Lvl {
+	switch strings.ToLower(os.Getenv(v)) {
+	case "debug":
+		return log.DEBUG
+	case "warn":
+		return log.WARN
+	case "error":
+		return log.ERROR
+	case "off":
+		return log.OFF
+	default:
+		return log.INFO
+	}
 }

@@ -95,6 +95,12 @@ wget '<span class="ext-url">EXTERNAL_URL/</span>?image=hello-world&image=busybox
 curl -fF "images.txt=@images.txt" <span class="dark-blue">-F "config.json=@$HOME/.docker/config.json"</span> <span class="ext-url">EXTERNAL_URL/</span> > images.tar
 </pre>
 
+<h3>Helm</h3>
+<h4>Repositories</h4>
+<pre class="codeblock">
+curl -fF "name=bitnami" -F "url=https://charts.bitnami.com/bitnami" <span class="ext-url">EXTERNAL_URL</span>/helm/repo
+</pre>
+
 <script>
     var extUrl = new URL("tar", window.location.href).href;
     var x = document.getElementsByClassName("ext-url");
