@@ -95,6 +95,30 @@ wget '<span class="ext-url">EXTERNAL_URL/</span>?image=hello-world&image=busybox
 curl -fF "images.txt=@images.txt" <span class="dark-blue">-F "config.json=@$HOME/.docker/config.json"</span> <span class="ext-url">EXTERNAL_URL/</span> > images.tar
 </pre>
 
+<h3>Helm</h3>
+Save-O-Mat can find docker images used with a helm chart. Charts are rendered using a user provided <code>values.yaml</code> file, producing a kubernetes manifest which is then scanned for container images.
+
+<h4>Repositories</h4>
+Be sure to add the corresponding chart repository before uploading a chart (as you would do with <code>helm repo add ...</code>).
+<pre class="codeblock">
+curl -fF "name=stable" -F "https://kubernetes-charts.storage.googleapis.com" <span class="ext-url">EXTERNAL_URL</span>/helm/chart
+</pre>
+
+A username and password for authentication with the repository can be provided with the respective <code>username</code> and <code>password</code> POST parameters.
+
+<h4>Charts</h4>
+Simply <code>POST</code> a chart reference along with your <code>values.yaml</code> file to receive the image tarball. Example with the <code>hackmd</code> chart:
+<pre class="codeblock">
+curl -fF "values.yaml=@values.yaml" -F "chart=stable/hackmd" <span class="ext-url">EXTERNAL_URL</span>/helm/chart > images.tar
+</pre>
+
+If the chart pulls from private registries set the URL parameter <code>auth</code> and provide your <code>config.json</code> like so:
+<pre class="codeblock">
+curl -fF <span class="dark-blue">"config.json=@config.json"</span> -F "values.yaml=@values.yaml" -F "chart=stable/hackmd" <span class="ext-url">EXTERNAL_URL</span>/helm/chart<span class="dark-blue">?auth=yes</span> > images.tar
+</pre>
+
+To enable chart verification set the <code>verify</code> URL parameter.
+
 <script>
     var extUrl = new URL("tar", window.location.href).href;
     var x = document.getElementsByClassName("ext-url");
