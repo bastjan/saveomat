@@ -31,9 +31,9 @@ import (
 )
 
 var (
-	repoFile    = os.Getenv("HELM_REPO_CONFIG_FILE")
-	repoCache   = os.Getenv("HELM_REPO_CACHE_DIR")
-	downloadDir = os.Getenv("HELM_DOWNLOAD_DIR")
+	repoCache   = envOrDefault("HELM_REPO_CACHE_DIR", "/tmp/saveomat")
+	repoFile    = envOrDefault("HELM_REPO_CONFIG_FILE", "/tmp/saveomat/helm.yaml")
+	downloadDir = envOrDefault("HELM_DOWNLOAD_DIR", "/tmp/saveomat")
 	settings    = &cli.EnvSettings{
 		RepositoryConfig: repoFile,
 		RepositoryCache:  repoCache,
@@ -52,11 +52,7 @@ type Server struct {
 }
 
 func NewServer(opt ServerOpts) *Server {
-	err := os.MkdirAll(filepath.Dir(repoFile), os.ModePerm)
-	if err != nil && !os.IsExist(err) {
-		panic(err)
-	}
-	err = os.MkdirAll(repoCache, 0755)
+	err := os.MkdirAll(repoCache, 0755)
 	if err != nil && !os.IsExist(err) {
 		panic(err)
 	}
@@ -80,8 +76,8 @@ func NewServer(opt ServerOpts) *Server {
 	})
 	g.POST("/tar", s.postTar)
 	g.GET("/tar", s.getTar)
-	g.POST("/helm/repo", s.postHelmRepo)
-	g.POST("/helm/chart", s.postHelmChart)
+	g.POST("/tar/helm/repo", s.postHelmRepo)
+	g.POST("/tar/helm/chart", s.postHelmChart)
 
 	return s
 }
@@ -128,13 +124,13 @@ func (s *Server) postHelmRepo(c echo.Context) error {
 	name := c.FormValue("name")
 	url := c.FormValue("url")
 	if name == "" {
-		return fmt.Errorf("Please specify a repository name using the name form param")
+		return fmt.Errorf("repository name not set")
 	}
 	if url == "" {
-		return fmt.Errorf("Please specify a repository URL using the url form param")
+		return fmt.Errorf("repository URL not set")
 	}
 
-	// The following code is adapted from https://github.com/helm/helm/blob/master/cmd/helm/repo_add.go#L85
+	// The following code is adapted from https://github.com/helm/helm/blob/master/cmd/helm/repo_add.go
 	fileLock := flock.New(strings.Replace(repoFile, filepath.Ext(repoFile), ".lock", 1))
 	lockCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -187,7 +183,6 @@ func (s *Server) postHelmRepo(c echo.Context) error {
 func (s *Server) postHelmChart(c echo.Context) error {
 	chrtRef := c.FormValue("chart")
 	chrtVer := c.FormValue("version")
-
 	file, err := c.FormFile("values.yaml")
 	if err != nil {
 		return err
@@ -201,31 +196,57 @@ func (s *Server) postHelmChart(c echo.Context) error {
 	if err != nil {
 		return err
 	}
-	vals := map[string]interface{}{}
-	if err := yaml.Unmarshal(buf, &vals); err != nil {
+	values := map[string]interface{}{}
+	if err := yaml.Unmarshal(buf, &values); err != nil {
 		return err
 	}
+	var authn auth.Authenticator
+	_, ok := c.QueryParams()["auth"] // Currently support only docker config.json
+	if ok {
+		var err error
+		authn, err = authFromFormFile(c, "config.json")
+		if err != nil {
+			return err
+		}
+	} else {
+		authn = auth.EmptyAuthenticator
+	}
+	_, verify := c.QueryParams()["verify"]
+	manifest, err := renderHelmChart(chrtRef, chrtVer, values, verify)
+	if err != nil {
+		return err
+	}
+	images, err := findImagesInManifest(manifest)
+	if err != nil {
+		return err
+	}
+	normalized := normalizeImages(images)
+	c.Logger().Info(fmt.Sprintf("Found %d images: %s", len(normalized), normalized))
+	return s.streamImages(c, authn, normalized)
+}
 
-	// The following code is adapted from https://github.com/helm/helm/blob/master/cmd/helm/install.go#L159
+func renderHelmChart(reference, version string, values map[string]interface{}, verify bool) (string, error) {
+	// The following code is adapted from https://github.com/helm/helm/blob/master/cmd/helm/install.go
 	client := action.NewInstall(&action.Configuration{})
 	client.ClientOnly = true
 	client.DryRun = true
-	client.Version = chrtVer
-	name, chart, err := client.NameAndChart([]string{"saveomat", chrtRef})
+	client.Version = version
+	client.Verify = verify
+	name, chart, err := client.NameAndChart([]string{"saveomat", reference})
 	if err != nil {
-		return err
+		return "", err
 	}
 	client.ReleaseName = name
 
 	cp, err := client.ChartPathOptions.LocateChart(chart, settings)
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	// Check chart dependencies to make sure all are present in /charts
 	chartRequested, err := loader.Load(cp)
 	if err != nil {
-		return err
+		return "", err
 	}
 	if req := chartRequested.Metadata.Dependencies; req != nil {
 		// If CheckDependencies returns an error, we have unfulfilled dependencies.
@@ -244,44 +265,46 @@ func (s *Server) postHelmChart(c echo.Context) error {
 					Debug:            settings.Debug,
 				}
 				if err := man.Update(); err != nil {
-					return err
+					return "", err
 				}
 				// Reload the chart with the updated Chart.lock file.
 				if chartRequested, err = loader.Load(cp); err != nil {
-					return errors.Wrap(err, "failed reloading chart after repo update")
+					return "", errors.Wrap(err, "failed reloading chart after repo update")
 				}
 			} else {
-				return err
+				return "", err
 			}
 		}
 	}
-	release, err := client.Run(chartRequested, vals)
+	release, err := client.Run(chartRequested, values)
 	if err != nil {
-		return err
+		return "", err
 	}
-
-	// TODO do not use strings split it here it can and will break
-	docs := strings.Split(release.Manifest, "---")
-	var images []string
-	for _, doc := range docs {
-		imgs, err := findImageNodeInYaml(doc)
-		if err != nil {
-			return err
-		}
-		images = append(images, imgs...)
-	}
-
-	c.Logger().Info(fmt.Sprintf("Found %d images: %s", len(images), images))
-	return s.streamImages(c, auth.EmptyAuthenticator, normalizeImages(images))
+	return release.Manifest, nil
 }
 
-func findImageNodeInYaml(yml string) ([]string, error) {
-	var node yaml.Node
+func findImagesInManifest(yml string) ([]string, error) {
 	var result []string
-	err := yaml.Unmarshal([]byte(yml), &node)
-	if err != nil {
-		return result, err
+	r := strings.NewReader(yml)
+	defer ioutil.ReadAll(r)
+
+	var node yaml.Node
+	var readErr error
+	for decoder := yaml.NewDecoder(r); readErr != io.EOF; readErr = decoder.Decode(&node) {
+		if readErr != nil {
+			return nil, readErr
+		}
+		images, err := findImagesInNode(node)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, images...)
 	}
+	return result, nil
+}
+
+func findImagesInNode(node yaml.Node) ([]string, error) {
+	var result []string
 	nodes, err := yqlib.NewYqLib().Get(&node, "**.image", false)
 	if err != nil {
 		return nil, err
@@ -353,8 +376,8 @@ func authFromFormFile(c echo.Context, filename string) (auth.Authenticator, erro
 	return auth.FromReader(authSrc)
 }
 
-func env2Lvl(v string) log.Lvl {
-	switch strings.ToLower(os.Getenv(v)) {
+func env2Lvl(key string) log.Lvl {
+	switch strings.ToLower(os.Getenv(key)) {
 	case "debug":
 		return log.DEBUG
 	case "warn":
@@ -366,4 +389,11 @@ func env2Lvl(v string) log.Lvl {
 	default:
 		return log.INFO
 	}
+}
+
+func envOrDefault(key, dflt string) string {
+	if e := os.Getenv(key); e != "" {
+		return e
+	}
+	return dflt
 }

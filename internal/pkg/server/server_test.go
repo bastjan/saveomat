@@ -33,6 +33,17 @@ var testAuthConf = `{
 		}
 	}
 }`
+var hackmdChartValuesYAML = `# Tests dependency (postgresql)
+image:
+  repository: hackmdio/hackmd
+  tag: 1.0.1-ce-alpine
+  pullPolicy: IfNotPresent
+postgresql:
+  install: true
+  imageTag: "9.6.2"
+  postgresUser: "hackmd"
+  postgresDatabase: "hackmd"
+`
 
 func TestBaseURL(t *testing.T) {
 	var subject http.Handler
@@ -54,6 +65,29 @@ func expectResponseCode(t *testing.T, handler http.Handler, path string, code in
 	handler.ServeHTTP(rec, req)
 
 	assert.Equal(t, code, rec.Code)
+}
+
+func TestPostHelmRepo(t *testing.T) {
+	subject := NewServer(ServerOpts{
+		DockerClient: dockerMockFor(t, []string{}, nil),
+	})
+
+	upload := new(bytes.Buffer)
+	mpw := multipart.NewWriter(upload)
+	fw, err := mpw.CreateFormField("name")
+	assert.NoError(t, err)
+	fw.Write([]byte("stable"))
+	fw, err = mpw.CreateFormField("url")
+	assert.NoError(t, err)
+	fw.Write([]byte("https://kubernetes-charts.storage.googleapis.com"))
+	mpw.Close()
+
+	req := httptest.NewRequest(http.MethodPost, "/tar/helm/repo", upload)
+	req.Header.Set(echo.HeaderContentType, mpw.FormDataContentType())
+	rec := httptest.NewRecorder()
+
+	subject.ServeHTTP(rec, req)
+	assert.Equal(t, http.StatusOK, rec.Code)
 }
 
 func TestPostTar(t *testing.T) {
@@ -136,6 +170,70 @@ func TestGetTar(t *testing.T) {
 	assert.Equal(t, expected, responseTar)
 }
 
+func TestPostHelmChart(t *testing.T) {
+	images := []string{"postgres:9.6.2", "hackmdio/hackmd:1.0.1-ce-alpine"}
+	chart := "stable/hackmd"
+	path := "/tar/helm/chart"
+	response := performHelmChartRequest(t, images, chart, path, nil)
+
+	assert.Equal(t, http.StatusOK, response.Code)
+	responseTar, err := ioutil.ReadAll(response.Body)
+	assert.NoError(t, err)
+	expected := mockTarBytes(t)
+	assert.Equal(t, expected, responseTar)
+}
+
+func TestPostHelmChartVerifyFail(t *testing.T) {
+	images := []string{}
+	chart := "stable/hackmd"
+	path := "/tar/helm/chart?verify=yes"
+	response := performHelmChartRequest(t, images, chart, path, nil)
+
+	assert.Equal(t, http.StatusInternalServerError, response.Code)
+}
+
+func TestPostHelmChartWithAuth(t *testing.T) {
+	images := []string{"postgres:9.6.2", "hackmdio/hackmd:1.0.1-ce-alpine"}
+	chart := "stable/hackmd"
+	path := "/tar/helm/chart?auth=yes"
+	authn, err := auth.FromReader(strings.NewReader(testAuthConf))
+	assert.NoError(t, err)
+	response := performHelmChartRequest(t, images, chart, path, authn)
+
+	assert.Equal(t, http.StatusOK, response.Code)
+	responseTar, err := ioutil.ReadAll(response.Body)
+	assert.NoError(t, err)
+	expected := mockTarBytes(t)
+	assert.Equal(t, expected, responseTar)
+}
+
+func performHelmChartRequest(t *testing.T, expectedImages []string, chartRef, targetURI string, authn auth.Authenticator) *httptest.ResponseRecorder {
+	t.Helper()
+
+	subject := NewServer(ServerOpts{
+		DockerClient: dockerMockFor(t, expectedImages, authn),
+	})
+
+	upload := new(bytes.Buffer)
+	mpw := multipart.NewWriter(upload)
+	fw, err := mpw.CreateFormFile("values.yaml", "values.yaml")
+	assert.NoError(t, err)
+	fw.Write([]byte(hackmdChartValuesYAML))
+	fw, err = mpw.CreateFormField("chart")
+	assert.NoError(t, err)
+	fw.Write([]byte(chartRef))
+	fw, err = mpw.CreateFormFile("config.json", "config.json")
+	assert.NoError(t, err)
+	fw.Write([]byte(testAuthConf))
+	mpw.Close()
+
+	req := httptest.NewRequest(http.MethodPost, targetURI, upload)
+	req.Header.Set(echo.HeaderContentType, mpw.FormDataContentType())
+	rec := httptest.NewRecorder()
+
+	subject.ServeHTTP(rec, req)
+	return rec
+}
 func dockerMockFor(t *testing.T, images []string, authn auth.Authenticator) *MockImageAPIClient {
 	ctrl := gomock.NewController(t)
 	mc := NewMockImageAPIClient(ctrl)
