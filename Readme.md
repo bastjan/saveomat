@@ -1,6 +1,6 @@
 # Save-O-Mat
 
-[![](https://github.com/bastjan/go-legacysyslog/workflows/Go/badge.svg)](https://github.com/bastjan/saveomat/actions?query=workflow%3AGo) [![codecov](https://codecov.io/gh/bastjan/saveomat/branch/master/graph/badge.svg)](https://codecov.io/gh/bastjan/saveomat) [![Docker Pulls](https://img.shields.io/docker/pulls/bastjan/saveomat)](https://hub.docker.com/r/bastjan/saveomat)
+[![gh actions](https://github.com/bastjan/saveomat/workflows/Go/badge.svg)](https://github.com/bastjan/saveomat/actions?query=workflow%3AGo) [![codecov](https://codecov.io/gh/bastjan/saveomat/branch/master/graph/badge.svg)](https://codecov.io/gh/bastjan/saveomat) [![Docker Pulls](https://img.shields.io/docker/pulls/bastjan/saveomat)](https://hub.docker.com/r/bastjan/saveomat)
 
 `docker save` with ease. With a simple HTTP API.
 
