@@ -67,29 +67,6 @@ func expectResponseCode(t *testing.T, handler http.Handler, path string, code in
 	assert.Equal(t, code, rec.Code)
 }
 
-func TestPostHelmRepo(t *testing.T) {
-	subject := NewServer(ServerOpts{
-		DockerClient: dockerMockFor(t, []string{}, nil),
-	})
-
-	upload := new(bytes.Buffer)
-	mpw := multipart.NewWriter(upload)
-	fw, err := mpw.CreateFormField("name")
-	assert.NoError(t, err)
-	fw.Write([]byte("stable"))
-	fw, err = mpw.CreateFormField("url")
-	assert.NoError(t, err)
-	fw.Write([]byte("https://kubernetes-charts.storage.googleapis.com"))
-	mpw.Close()
-
-	req := httptest.NewRequest(http.MethodPost, "/tar/helm/repo", upload)
-	req.Header.Set(echo.HeaderContentType, mpw.FormDataContentType())
-	rec := httptest.NewRecorder()
-
-	subject.ServeHTTP(rec, req)
-	assert.Equal(t, http.StatusOK, rec.Code)
-}
-
 func TestPostTar(t *testing.T) {
 	images := []string{"busybox", "open.io/busybox", "test.io/busybox"}
 
@@ -173,7 +150,7 @@ func TestGetTar(t *testing.T) {
 func TestPostHelmChart(t *testing.T) {
 	images := []string{"postgres:9.6.2", "hackmdio/hackmd:1.0.1-ce-alpine"}
 	chart := "stable/hackmd"
-	path := "/tar/helm/chart"
+	path := "/helm"
 	response := performHelmChartRequest(t, images, chart, path, nil)
 
 	assert.Equal(t, http.StatusOK, response.Code)
@@ -186,7 +163,7 @@ func TestPostHelmChart(t *testing.T) {
 func TestPostHelmChartVerifyFail(t *testing.T) {
 	images := []string{}
 	chart := "stable/hackmd"
-	path := "/tar/helm/chart?verify=yes"
+	path := "/helm?verify=yes"
 	response := performHelmChartRequest(t, images, chart, path, nil)
 
 	assert.Equal(t, http.StatusInternalServerError, response.Code)
@@ -195,7 +172,7 @@ func TestPostHelmChartVerifyFail(t *testing.T) {
 func TestPostHelmChartWithAuth(t *testing.T) {
 	images := []string{"postgres:9.6.2", "hackmdio/hackmd:1.0.1-ce-alpine"}
 	chart := "stable/hackmd"
-	path := "/tar/helm/chart?auth=yes"
+	path := "/helm?auth=yes"
 	authn, err := auth.FromReader(strings.NewReader(testAuthConf))
 	assert.NoError(t, err)
 	response := performHelmChartRequest(t, images, chart, path, authn)
@@ -216,7 +193,13 @@ func performHelmChartRequest(t *testing.T, expectedImages []string, chartRef, ta
 
 	upload := new(bytes.Buffer)
 	mpw := multipart.NewWriter(upload)
-	fw, err := mpw.CreateFormFile("values.yaml", "values.yaml")
+	fw, err := mpw.CreateFormField("repoName")
+	assert.NoError(t, err)
+	fw.Write([]byte("stable"))
+	fw, err = mpw.CreateFormField("repoURL")
+	assert.NoError(t, err)
+	fw.Write([]byte("https://kubernetes-charts.storage.googleapis.com"))
+	fw, err = mpw.CreateFormFile("values.yaml", "values.yaml")
 	assert.NoError(t, err)
 	fw.Write([]byte(hackmdChartValuesYAML))
 	fw, err = mpw.CreateFormField("chart")
