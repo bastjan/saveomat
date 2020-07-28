@@ -100,7 +100,7 @@ func (r *Renderer) ensureRepo(cfg repo.Entry) error {
 	}
 
 	if _, err := repo.DownloadIndexFile(); err != nil {
-		return errors.Errorf("looks like %q is not a valid chart repository or cannot be reached: %w", cfg.URL, err)
+		return errors.Errorf(fmt.Sprintf("looks like %q is not a valid chart repository or cannot be reached: ", cfg.URL)+"%w", err)
 	}
 
 	f.Update(&cfg)
