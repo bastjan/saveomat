@@ -98,26 +98,70 @@ curl -fF "images.txt=@images.txt" <span class="dark-blue">-F "config.json=@$HOME
 <h3>Helm</h3>
 Save-O-Mat can find docker images used with a helm chart. Charts are rendered using a user provided <code>values.yaml</code> file, producing a kubernetes manifest which is then scanned for container images.
 
-<h4>Repositories</h4>
-Be sure to add the corresponding chart repository before uploading a chart (as you would do with <code>helm repo add ...</code>).
+Simply <code>POST</code> a chart reference along with your <code>values.yaml</code> file to receive the image tarball. The chart repository is handled transparently. The following options are currently available via POST parameters:
+<br />
+<br />
+<table>
+  <tr>
+    <th align="left">Parameter</th>
+    <th align="left">Description</th>
+  </tr>
+  <tr>
+    <td>repoName</td>
+    <td>Name of the chart repository hosting the chart</td>
+  </tr>
+  <tr>
+    <td>repoURL</td>
+    <td>URL of the chart repository</td>
+  </tr>
+  <tr>
+    <td>username</td>
+    <td>Username for the chart repo (optional)</td>
+  </tr>
+  <tr>
+    <td>password</td>
+    <td>Password for the chart repo (optional)</td>
+  </tr>
+  <tr>
+    <td>chart</td>
+    <td>The chart reference</td>
+  </tr>
+  <tr>
+    <td>version</td>
+    <td>The chart version (optional)</td>
+  </tr>
+  <tr>
+    <td>values.yaml</td>
+    <td>Custom values.yaml file that will be applied during rendering</td>
+  </tr>
+  <tr>
+    <td>verify</td>
+    <td>Enable chart verification (optional, set to any value to enable)</td>
+  </tr>
+  <tr>
+    <td>auth</td>
+    <td>config.json file for docker daemon to use (optional, same as in above Authentication section)</td>
+  </tr>
+</table><br />
+
+Example with the <code>hackmd</code> chart:
 <pre class="codeblock">
-curl -fF "name=stable" -F "https://kubernetes-charts.storage.googleapis.com" <span class="ext-url">EXTERNAL_URL</span>/helm/chart
+curl -fF "values.yaml=@values.yaml" -F "chart=stable/hackmd" -F "repoName=stable" -F "repoURL=https://kubernetes-charts.storage.googleapis.com" http://localhost:8080/helm -o test.tar
 </pre>
 
-A username and password for authentication with the repository can be provided with the respective <code>username</code> and <code>password</code> POST parameters.
-
-<h4>Charts</h4>
-Simply <code>POST</code> a chart reference along with your <code>values.yaml</code> file to receive the image tarball. Example with the <code>hackmd</code> chart:
+The example uses the following values.yaml file:
 <pre class="codeblock">
-curl -fF "values.yaml=@values.yaml" -F "chart=stable/hackmd" <span class="ext-url">EXTERNAL_URL</span>/helm/chart > images.tar
+image:
+  repository: hackmdio/hackmd
+  tag: 1.0.1-ce-alpine
+  pullPolicy: IfNotPresent
+postgresql:
+  install: true
+  image:
+    tag: "9.6"
+  postgresUser: "hackmd"
+  postgresDatabase: "hackmd"
 </pre>
-
-If the chart pulls from private registries set the URL parameter <code>auth</code> and provide your <code>config.json</code> like so:
-<pre class="codeblock">
-curl -fF <span class="dark-blue">"config.json=@config.json"</span> -F "values.yaml=@values.yaml" -F "chart=stable/hackmd" <span class="ext-url">EXTERNAL_URL</span>/helm/chart<span class="dark-blue">?auth=yes</span> > images.tar
-</pre>
-
-To enable chart verification set the <code>verify</code> URL parameter.
 
 <script>
     var extUrl = new URL("tar", window.location.href).href;
