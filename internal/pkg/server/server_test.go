@@ -40,7 +40,8 @@ image:
   pullPolicy: IfNotPresent
 postgresql:
   install: true
-  imageTag: "9.6.2"
+  image:
+    tag: "9.6"
   postgresUser: "hackmd"
   postgresDatabase: "hackmd"
 `
@@ -148,7 +149,7 @@ func TestGetTar(t *testing.T) {
 }
 
 func TestPostHelmChart(t *testing.T) {
-	images := []string{"postgres:9.6.2", "hackmdio/hackmd:1.0.1-ce-alpine"}
+	images := []string{"hackmdio/hackmd:1.0.1-ce-alpine", "docker.io/bitnami/minideb:stretch", "docker.io/bitnami/postgresql:9.6"}
 	chart := "stable/hackmd"
 	path := "/helm"
 	response := performHelmChartRequest(t, images, chart, path, nil)
@@ -170,7 +171,7 @@ func TestPostHelmChartVerifyFail(t *testing.T) {
 }
 
 func TestPostHelmChartWithAuth(t *testing.T) {
-	images := []string{"postgres:9.6.2", "hackmdio/hackmd:1.0.1-ce-alpine"}
+	images := []string{"hackmdio/hackmd:1.0.1-ce-alpine", "docker.io/bitnami/minideb:stretch", "docker.io/bitnami/postgresql:9.6"}
 	chart := "stable/hackmd"
 	path := "/helm?auth=yes"
 	authn, err := auth.FromReader(strings.NewReader(testAuthConf))
