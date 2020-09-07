@@ -135,16 +135,9 @@ func (s *Server) postHelm(c echo.Context) error {
 		Values:         values,
 	}
 
-	var authn auth.Authenticator
-	_, ok := c.QueryParams()["auth"] // Currently support only docker config.json
-	if ok {
-		var err error
-		authn, err = authFromFormFile(c, "config.json")
-		if err != nil {
-			return err
-		}
-	} else {
-		authn = auth.EmptyAuthenticator
+	authn, err := authFromFormFile(c, "config.json")
+	if err != nil {
+		return err
 	}
 
 	manifest, err := s.HelmClient.Render(target)
