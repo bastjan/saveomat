@@ -48,7 +48,7 @@ func NewServer(opt ServerOpts) *Server {
 	})
 	g.POST("/tar", s.postTar)
 	g.GET("/tar", s.getTar)
-	g.POST("/helm", s.postHelm)
+	g.POST("/helm/tar", s.postHelm)
 
 	return s
 }

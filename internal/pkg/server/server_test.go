@@ -151,7 +151,7 @@ func TestGetTar(t *testing.T) {
 func TestPostHelmChart(t *testing.T) {
 	images := []string{"hackmdio/hackmd:1.0.1-ce-alpine", "docker.io/bitnami/minideb:stretch", "docker.io/bitnami/postgresql:9.6"}
 	chart := "stable/hackmd"
-	path := "/helm"
+	path := "/helm/tar"
 	response := performHelmChartRequest(t, images, chart, path, nil)
 
 	assert.Equal(t, http.StatusOK, response.Code)
@@ -164,7 +164,7 @@ func TestPostHelmChart(t *testing.T) {
 func TestPostHelmChartVerifyFail(t *testing.T) {
 	images := []string{}
 	chart := "stable/hackmd"
-	path := "/helm?verify=yes"
+	path := "/helm/tar?verify=yes"
 	response := performHelmChartRequest(t, images, chart, path, nil)
 
 	assert.Equal(t, http.StatusInternalServerError, response.Code)
@@ -173,7 +173,7 @@ func TestPostHelmChartVerifyFail(t *testing.T) {
 func TestPostHelmChartWithAuth(t *testing.T) {
 	images := []string{"hackmdio/hackmd:1.0.1-ce-alpine", "docker.io/bitnami/minideb:stretch", "docker.io/bitnami/postgresql:9.6"}
 	chart := "stable/hackmd"
-	path := "/helm?auth=yes"
+	path := "/helm/tar?auth=yes"
 	authn, err := auth.FromReader(strings.NewReader(testAuthConf))
 	assert.NoError(t, err)
 	response := performHelmChartRequest(t, images, chart, path, authn)
