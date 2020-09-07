@@ -95,6 +95,74 @@ wget '<span class="ext-url">EXTERNAL_URL/</span>?image=hello-world&image=busybox
 curl -fF "images.txt=@images.txt" <span class="dark-blue">-F "config.json=@$HOME/.docker/config.json"</span> <span class="ext-url">EXTERNAL_URL/</span> > images.tar
 </pre>
 
+<h3>Helm</h3>
+Save-O-Mat can find docker images used with a helm chart. Charts are rendered using a user provided <code>values.yaml</code> file, producing a kubernetes manifest which is then scanned for container images.
+
+Simply <code>POST</code> a chart reference along with your <code>values.yaml</code> file to receive the image tarball. The chart repository is handled transparently. The following options are currently available via POST parameters:
+<br />
+<br />
+<table>
+  <tr>
+    <th align="left">Parameter</th>
+    <th align="left">Description</th>
+  </tr>
+  <tr>
+    <td>repoName</td>
+    <td>Name of the chart repository hosting the chart</td>
+  </tr>
+  <tr>
+    <td>repoURL</td>
+    <td>URL of the chart repository</td>
+  </tr>
+  <tr>
+    <td>username</td>
+    <td>Username for the chart repo (optional)</td>
+  </tr>
+  <tr>
+    <td>password</td>
+    <td>Password for the chart repo (optional)</td>
+  </tr>
+  <tr>
+    <td>chart</td>
+    <td>The chart reference</td>
+  </tr>
+  <tr>
+    <td>version</td>
+    <td>The chart version (optional)</td>
+  </tr>
+  <tr>
+    <td>values.yaml</td>
+    <td>Custom values.yaml file that will be applied during rendering</td>
+  </tr>
+  <tr>
+    <td>verify</td>
+    <td>Enable chart verification (optional, set to any value to enable)</td>
+  </tr>
+  <tr>
+    <td>config.json</td>
+    <td>config.json file for docker daemon to use (optional, same as in above Authentication section)</td>
+  </tr>
+</table><br />
+
+Example with the <code>hackmd</code> chart:
+<pre class="codeblock">
+curl -fF "values.yaml=@values.yaml" -F "chart=stable/hackmd" -F "repoName=stable" -F "repoURL=https://kubernetes-charts.storage.googleapis.com" <span class="ext-url">EXTERNAL_URL/</span>helm -o test.tar
+</pre>
+
+The example uses the following values.yaml file:
+<pre class="codeblock">
+image:
+  repository: hackmdio/hackmd
+  tag: 1.0.1-ce-alpine
+  pullPolicy: IfNotPresent
+postgresql:
+  install: true
+  image:
+    tag: "9.6"
+  postgresUser: "hackmd"
+  postgresDatabase: "hackmd"
+</pre>
+
 <script>
     var extUrl = new URL("tar", window.location.href).href;
     var x = document.getElementsByClassName("ext-url");

@@ -3,16 +3,22 @@ package server
 import (
 	"bufio"
 	"context"
+	"fmt"
 	"io"
+	"io/ioutil"
 	"net/http"
 	"os"
 	"strings"
 
 	"github.com/bastjan/saveomat/internal/pkg/auth"
+	"github.com/bastjan/saveomat/internal/pkg/helmchart"
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/client"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
+	"github.com/labstack/gommon/log"
+	"gopkg.in/yaml.v3"
+	"helm.sh/helm/v3/pkg/repo"
 )
 
 type ServerOpts struct {
@@ -23,11 +29,13 @@ type ServerOpts struct {
 type Server struct {
 	*echo.Echo
 	DockerClient client.ImageAPIClient
+	HelmClient   helmchart.Renderer
 }
 
 func NewServer(opt ServerOpts) *Server {
 	e := echo.New()
-	s := &Server{e, opt.DockerClient}
+	s := &Server{e, opt.DockerClient, helmchart.NewRenderer()}
+	s.Logger.SetLevel(env2Lvl("LOG_LEVEL"))
 
 	e.Use(middleware.Logger())
 	e.Use(middleware.Recover())
@@ -40,6 +48,7 @@ func NewServer(opt ServerOpts) *Server {
 	})
 	g.POST("/tar", s.postTar)
 	g.GET("/tar", s.getTar)
+	g.POST("/helm/tar", s.postHelm)
 
 	return s
 }
@@ -80,6 +89,68 @@ func (s *Server) postTar(c echo.Context) error {
 	}
 
 	return s.streamImages(c, authn, normalizeImages(images))
+}
+
+func (s *Server) postHelm(c echo.Context) error {
+	// Chart settings
+	repoName := c.FormValue("repoName")
+	if repoName == "" {
+		return fmt.Errorf("repository name not set")
+	}
+	repoURL := c.FormValue("repoURL")
+	if repoURL == "" {
+		return fmt.Errorf("repository URL not set")
+	}
+	chrtRef := c.FormValue("chart")
+	chrtVer := c.FormValue("version")
+	file, err := c.FormFile("values.yaml")
+	if err != nil {
+		return err
+	}
+	src, err := file.Open()
+	if err != nil {
+		return err
+	}
+	defer src.Close()
+	buf, err := ioutil.ReadAll(src)
+	if err != nil {
+		return err
+	}
+	values := map[string]interface{}{}
+	if err := yaml.Unmarshal(buf, &values); err != nil {
+		return err
+	}
+	_, verify := c.QueryParams()["verify"]
+	target := helmchart.RenderTarget{
+		RepoConfig: repo.Entry{
+			Name:                  repoName,
+			URL:                   repoURL,
+			Username:              c.FormValue("username"),
+			Password:              c.FormValue("password"),
+			InsecureSkipTLSverify: false,
+		},
+		Verify:         verify,
+		ChartReference: chrtRef,
+		ChartVersion:   chrtVer,
+		Values:         values,
+	}
+
+	authn, err := authFromFormFile(c, "config.json")
+	if err != nil {
+		return err
+	}
+
+	manifest, err := s.HelmClient.Render(target)
+	if err != nil {
+		return err
+	}
+	images, err := helmchart.FindImagesInManifest(manifest)
+	if err != nil {
+		return err
+	}
+	normalized := normalizeImages(images)
+	c.Logger().Info(fmt.Sprintf("Found %d images: %s", len(normalized), normalized))
+	return s.streamImages(c, authn, normalized)
 }
 
 func normalizeImages(images []string) []string {
@@ -141,4 +212,19 @@ func authFromFormFile(c echo.Context, filename string) (auth.Authenticator, erro
 	defer authSrc.Close()
 
 	return auth.FromReader(authSrc)
+}
+
+func env2Lvl(key string) log.Lvl {
+	switch strings.ToLower(os.Getenv(key)) {
+	case "debug":
+		return log.DEBUG
+	case "warn":
+		return log.WARN
+	case "error":
+		return log.ERROR
+	case "off":
+		return log.OFF
+	default:
+		return log.INFO
+	}
 }
