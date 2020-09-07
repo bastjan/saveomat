@@ -139,7 +139,7 @@ Simply <code>POST</code> a chart reference along with your <code>values.yaml</co
     <td>Enable chart verification (optional, set to any value to enable)</td>
   </tr>
   <tr>
-    <td>auth</td>
+    <td>config.json</td>
     <td>config.json file for docker daemon to use (optional, same as in above Authentication section)</td>
   </tr>
 </table><br />
