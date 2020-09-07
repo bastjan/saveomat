@@ -146,7 +146,7 @@ Simply <code>POST</code> a chart reference along with your <code>values.yaml</co
 
 Example with the <code>hackmd</code> chart:
 <pre class="codeblock">
-curl -fF "values.yaml=@values.yaml" -F "chart=stable/hackmd" -F "repoName=stable" -F "repoURL=https://kubernetes-charts.storage.googleapis.com" http://localhost:8080/helm -o test.tar
+curl -fF "values.yaml=@values.yaml" -F "chart=stable/hackmd" -F "repoName=stable" -F "repoURL=https://kubernetes-charts.storage.googleapis.com" <span class="ext-url">EXTERNAL_URL/</span>helm -o test.tar
 </pre>
 
 The example uses the following values.yaml file:
