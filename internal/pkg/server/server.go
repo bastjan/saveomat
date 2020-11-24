@@ -13,6 +13,7 @@ import (
 	"github.com/docker/docker/client"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
+	"golang.org/x/sync/errgroup"
 )
 
 type ServerOpts struct {
@@ -38,8 +39,20 @@ func NewServer(opt ServerOpts) *Server {
 	g.GET("/", func(c echo.Context) error {
 		return c.HTML(http.StatusOK, indexHTML)
 	})
-	g.POST("/tar", s.postTar)
-	g.GET("/tar", s.getTar)
+	g.POST("/tar", func(c echo.Context) error {
+		err := s.postTar(c)
+		if err != nil {
+			return dockerToEchoErrorMapping(err)
+		}
+		return nil
+	})
+	g.GET("/tar", func(c echo.Context) error {
+		err := s.getTar(c)
+		if err != nil {
+			return dockerToEchoErrorMapping(err)
+		}
+		return nil
+	})
 
 	return s
 }
@@ -110,21 +123,32 @@ func (s *Server) streamImages(c echo.Context, pullAuth auth.Authenticator, image
 }
 
 func (s *Server) pullAndSaveImages(ctx context.Context, authn auth.Authenticator, images []string) (io.ReadCloser, error) {
+
+	g, errCtx := errgroup.WithContext(ctx)
+
 	for _, img := range images {
-		encodedAuth, err := auth.RegistryAuthFor(authn, img)
-		if err != nil {
-			return nil, err
-		}
-		rc, err := s.DockerClient.ImagePull(ctx, img, types.ImagePullOptions{
-			RegistryAuth: encodedAuth,
+		img := img
+		g.Go(func() error {
+			encodedAuth, err := auth.RegistryAuthFor(authn, img)
+			if err != nil {
+				return err
+			}
+			rc, err := s.DockerClient.ImagePull(errCtx, img, types.ImagePullOptions{
+				RegistryAuth: encodedAuth,
+			})
+			if err != nil {
+				return err
+			}
+			defer rc.Close()
+			io.Copy(os.Stdout, rc)
+			return nil
 		})
-		if err != nil {
-			return nil, err
-		}
-		defer rc.Close()
-		io.Copy(os.Stdout, rc)
+
 	}
 
+	if err := g.Wait(); err != nil {
+		return nil, err
+	}
 	return s.DockerClient.ImageSave(ctx, images)
 }
 
@@ -141,4 +165,27 @@ func authFromFormFile(c echo.Context, filename string) (auth.Authenticator, erro
 	defer authSrc.Close()
 
 	return auth.FromReader(authSrc)
+}
+
+func dockerToEchoErrorMapping(err error) *echo.HTTPError {
+	var status int
+	switch {
+	case strings.Contains(err.Error(), "forbidden"):
+		status = http.StatusForbidden
+	case strings.Contains(err.Error(), "not found"):
+		status = http.StatusNotFound
+	case strings.Contains(err.Error(), "unauthorised"):
+		status = http.StatusUnauthorized
+	case strings.Contains(err.Error(), "service unavailable"):
+		status = http.StatusServiceUnavailable
+	case strings.Contains(err.Error(), "bad request"):
+		status = http.StatusBadRequest
+	case strings.Contains(err.Error(), "bad gateway"):
+		status = http.StatusBadGateway
+	case strings.Contains(err.Error(), "request timeout"):
+		status = http.StatusRequestTimeout
+	default:
+		status = http.StatusInternalServerError
+	}
+	return echo.NewHTTPError(status, err.Error())
 }
