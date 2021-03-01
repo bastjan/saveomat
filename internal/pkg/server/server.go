@@ -3,6 +3,7 @@ package server
 import (
 	"bufio"
 	"context"
+	"embed"
 	"io"
 	"net/http"
 	"os"
@@ -15,6 +16,9 @@ import (
 	"github.com/labstack/echo/v4/middleware"
 	"golang.org/x/sync/errgroup"
 )
+
+//go:embed public/*
+var publicContent embed.FS
 
 type ServerOpts struct {
 	BaseURL      string
@@ -35,10 +39,15 @@ func NewServer(opt ServerOpts) *Server {
 	e.Use(middleware.BodyLimit("512K"))
 
 	baseurl := strings.TrimSuffix(opt.BaseURL, "/")
+
+	// Redirect /base -> /base/
+	if baseurl != "" {
+		e.GET(baseurl, func(c echo.Context) error {
+			return c.Redirect(http.StatusPermanentRedirect, baseurl+"/")
+		})
+	}
+
 	g := e.Group(baseurl)
-	g.GET("/", func(c echo.Context) error {
-		return c.HTML(http.StatusOK, indexHTML)
-	})
 	g.POST("/tar", func(c echo.Context) error {
 		err := s.postTar(c)
 		if err != nil {
@@ -53,6 +62,8 @@ func NewServer(opt ServerOpts) *Server {
 		}
 		return nil
 	})
+	// Static files for web gui
+	g.GET("/*", echo.WrapHandler(http.FileServer(http.FS(publicContent))), middleware.Rewrite(map[string]string{baseurl + "/*": "/public/$1"}))
 
 	return s
 }
