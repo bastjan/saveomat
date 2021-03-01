@@ -39,6 +39,14 @@ func NewServer(opt ServerOpts) *Server {
 	e.Use(middleware.BodyLimit("512K"))
 
 	baseurl := strings.TrimSuffix(opt.BaseURL, "/")
+
+	// Redirect /base -> /base/
+	if baseurl != "" {
+		e.GET(baseurl, func(c echo.Context) error {
+			return c.Redirect(http.StatusPermanentRedirect, baseurl+"/")
+		})
+	}
+
 	g := e.Group(baseurl)
 	g.POST("/tar", func(c echo.Context) error {
 		err := s.postTar(c)
@@ -54,7 +62,8 @@ func NewServer(opt ServerOpts) *Server {
 		}
 		return nil
 	})
-	e.GET("/*", echo.WrapHandler(http.FileServer(http.FS(publicContent))), middleware.Rewrite(map[string]string{"/*": "/public/$1"}))
+	// Static files for web gui
+	g.GET("/*", echo.WrapHandler(http.FileServer(http.FS(publicContent))), middleware.Rewrite(map[string]string{baseurl + "/*": "/public/$1"}))
 
 	return s
 }

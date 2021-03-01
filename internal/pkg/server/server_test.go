@@ -43,6 +43,7 @@ func TestBaseURL(t *testing.T) {
 
 	subject = NewServer(ServerOpts{BaseURL: "/sub"})
 	expectResponseCode(t, subject, "/", http.StatusNotFound)
+	expectResponseCode(t, subject, "/sub", http.StatusPermanentRedirect)
 	expectResponseCode(t, subject, "/sub/", http.StatusOK)
 }
 
