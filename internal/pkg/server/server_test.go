@@ -1,4 +1,4 @@
-//go:generate mockgen -package server -destination image_api_client_mock_test.go github.com/docker/docker/client ImageAPIClient
+//go:generate go run github.com/golang/mock/mockgen -package server -destination image_api_client_mock_test.go github.com/docker/docker/client ImageAPIClient
 
 package server
 
